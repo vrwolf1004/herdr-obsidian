@@ -1,6 +1,7 @@
 mod config;
 mod editor;
 mod files;
+mod i18n;
 mod tree;
 mod ui;
 mod vaults;
@@ -21,6 +22,7 @@ use ratatui::DefaultTerminal;
 use unicode_width::UnicodeWidthChar;
 
 use editor::Editor;
+use i18n::t;
 use tree::Tree;
 
 /// Save this long after the last keystroke.
@@ -28,12 +30,6 @@ const DEBOUNCE: Duration = Duration::from_millis(800);
 const IDLE_POLL: Duration = Duration::from_millis(1000);
 /// Wait this long before retrying a failed autosave (no tight loop on a locked file).
 const RETRY_INTERVAL: Duration = Duration::from_secs(3);
-const USAGE: &str = "herdr-obsidian [vault]
-
-vault: folder to add to the vault list and open it. The list is kept in config.toml:
-  Windows  %APPDATA%\\herdr-obsidian\\config.toml
-  other    $XDG_CONFIG_HOME/herdr-obsidian/config.toml (or ~/.config)
-  vaults = ['C:\\work\\obsidian\\herdr_test', 'C:\\work\\obsidian\\test']";
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Focus {
@@ -107,7 +103,7 @@ impl App {
             tree_offset: 0,
             editor: None,
             focus: Focus::Tree,
-            status: ui::DEFAULT_STATUS.into(),
+            status: t("status.default", &[]),
             prompt: None,
             confirm_delete: None,
             tree_area: Rect::default(),
@@ -122,7 +118,7 @@ impl App {
     fn open_folder(&mut self, input: &str) {
         match resolve_folder(&self.vault, input) {
             Ok(dir) => {
-                self.status = format!("folder: {}", dir.display());
+                self.status = t("msg.folder_opened", &[("path", &dir.display().to_string())]);
                 self.tree.set_root(dir);
                 self.selected = 0;
                 self.tree_offset = 0;
@@ -190,7 +186,10 @@ impl App {
                 self.tree.expanded.insert(parent.to_path_buf());
                 self.tree.refresh();
                 self.select_path(&path);
-                self.status = format!("created folder: {}", path.display());
+                self.status = t(
+                    "msg.folder_created",
+                    &[("path", &path.display().to_string())],
+                );
             }
             Err(msg) => self.status = msg,
         }
@@ -225,7 +224,7 @@ impl App {
                 self.select_path(&path);
                 // Open it through the normal path so the current note is saved first.
                 self.activate(self.selected);
-                self.status = format!("created: {}", path.display());
+                self.status = t("msg.note_created", &[("path", &path.display().to_string())]);
             }
             Err(msg) => self.status = msg,
         }
@@ -234,7 +233,7 @@ impl App {
     fn selected_file(&mut self) -> Option<(PathBuf, String)> {
         let row = self.tree.rows.get(self.selected)?;
         if row.is_dir {
-            self.status = "폴더는 이 기능을 지원하지 않습니다 (파일을 선택하세요)".into();
+            self.status = t("msg.folder_not_supported", &[]);
             return None;
         }
         Some((row.path.clone(), row.name.clone()))
@@ -268,7 +267,7 @@ impl App {
                 }
                 self.tree.refresh();
                 self.select_path(&to);
-                self.status = format!("renamed: {}", to.display());
+                self.status = t("msg.renamed", &[("path", &to.display().to_string())]);
             }
             Err(msg) => self.status = msg,
         }
@@ -281,11 +280,11 @@ impl App {
                 .as_ref()
                 .is_some_and(|e| e.path == path && e.dirty);
             let warn = if unsaved {
-                " (저장 안 된 변경 포함)"
+                t("msg.unsaved_suffix", &[])
             } else {
-                ""
+                String::new()
             };
-            self.status = format!("'{name}' 휴지통으로 이동{warn}? y 확인 · 다른 키 취소");
+            self.status = t("msg.confirm_trash", &[("name", &name), ("warn", &warn)]);
             self.confirm_delete = Some(path);
         }
     }
@@ -295,7 +294,7 @@ impl App {
             return;
         };
         if key.code != KeyCode::Char('y') && key.code != KeyCode::Char('Y') {
-            self.status = "휴지통 이동 취소".into();
+            self.status = t("msg.trash_cancelled", &[]);
             return;
         }
         match files::trash_note(&self.tree.root, &path, SystemTime::now()) {
@@ -307,7 +306,7 @@ impl App {
                 }
                 self.tree.refresh();
                 self.clamp_selection();
-                self.status = format!("휴지통으로 이동: {}", target.display());
+                self.status = t("msg.trashed", &[("path", &target.display().to_string())]);
             }
             Err(msg) => self.status = msg,
         }
@@ -329,19 +328,24 @@ impl App {
         if !force && ed.changed_on_disk() {
             // Keep the edits in memory; nothing is written until the user forces it.
             ed.conflict = true;
-            self.status =
-                "외부에서 변경됨: 자동 저장 멈춤. Ctrl+S 로 덮어쓰기 (편집 내용은 유지)".into();
+            self.status = t("msg.conflict", &[]);
             return false;
         }
         match ed.save() {
             Ok(()) => {
                 self.retry_at = None;
-                self.status = format!("saved: {}", ed.path.display());
+                self.status = t("msg.saved", &[("path", &ed.path.display().to_string())]);
                 true
             }
             Err(e) => {
                 self.retry_at = Some(Instant::now() + RETRY_INTERVAL);
-                self.status = format!("저장 실패 ({}초 후 재시도): {e}", RETRY_INTERVAL.as_secs());
+                self.status = t(
+                    "msg.save_failed",
+                    &[
+                        ("secs", &RETRY_INTERVAL.as_secs().to_string()),
+                        ("error", &e.to_string()),
+                    ],
+                );
                 false
             }
         }
@@ -379,11 +383,11 @@ impl App {
         }
         match Editor::open(row.path) {
             Ok(ed) => {
-                self.status = format!("opened: {}", row.name);
+                self.status = t("msg.opened", &[("name", &row.name)]);
                 self.editor = Some(ed);
                 self.focus = Focus::Editor;
             }
-            Err(e) => self.status = format!("open failed: {e}"),
+            Err(e) => self.status = t("msg.open_failed", &[("error", &e.to_string())]),
         }
     }
 
@@ -405,7 +409,10 @@ impl App {
             return;
         }
         if !path.is_dir() {
-            self.status = format!("볼트 폴더가 없습니다: {}", path.display());
+            self.status = t(
+                "msg.vault_missing",
+                &[("path", &path.display().to_string())],
+            );
             return;
         }
         if !self.save_now() {
@@ -419,7 +426,10 @@ impl App {
         self.selected = 0;
         self.tree_offset = 0;
         self.focus = Focus::Tree;
-        self.status = format!("vault: {}", path.display());
+        self.status = t(
+            "msg.vault_switched",
+            &[("path", &path.display().to_string())],
+        );
     }
 
     fn vault_key(&mut self, key: KeyEvent) {
@@ -529,7 +539,7 @@ fn col_at(line: &str, width: usize) -> usize {
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     if matches!(args.first().map(String::as_str), Some("-h" | "--help")) {
-        println!("{USAGE}");
+        println!("{}", t("usage", &[]));
         return ExitCode::SUCCESS;
     }
     let (vaults, current) = match vaults::startup(args.first()) {
@@ -562,21 +572,23 @@ fn resolve_folder(vault: &Path, input: &str) -> Result<PathBuf, String> {
         return if dir.is_dir() {
             Ok(dir)
         } else {
-            Err(format!("folder not found: {input}"))
+            Err(t("err.folder_not_found", &[("input", input)]))
         };
     }
     let candidate = vault.join(input);
-    let real_vault = vault.canonicalize().map_err(|e| format!("vault: {e}"))?;
+    let real_vault = vault
+        .canonicalize()
+        .map_err(|e| t("err.vault_io", &[("error", &e.to_string())]))?;
     let real = candidate
         .canonicalize()
-        .map_err(|_| format!("folder not found: {input}"))?;
+        .map_err(|_| t("err.folder_not_found", &[("input", input)]))?;
     if !real.is_dir() {
-        return Err(format!("not a folder: {input}"));
+        return Err(t("err.not_folder", &[("input", input)]));
     }
     match real.strip_prefix(&real_vault) {
         Ok(rel) if rel.as_os_str().is_empty() => Ok(vault.to_path_buf()),
         Ok(rel) => Ok(vault.join(rel)),
-        Err(_) => Err(format!("outside vault: {input}")),
+        Err(_) => Err(t("err.outside_vault", &[("input", input)])),
     }
 }
 
@@ -653,7 +665,7 @@ fn handle_key(app: &mut App, key: KeyEvent) {
                     app.quit = true;
                 } else {
                     app.quit_armed = true;
-                    app.status = "저장 실패: 다시 Ctrl+Q 를 누르면 저장하지 않고 종료합니다".into();
+                    app.status = t("msg.quit_armed", &[]);
                 }
                 return;
             }
@@ -729,6 +741,7 @@ fn handle_mouse(app: &mut App, m: MouseEvent) {
 mod tests {
     use super::{col_at, resolve_folder, App};
     use crate::editor::Editor;
+    use crate::i18n::t;
     use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::fs;
 
@@ -794,12 +807,14 @@ mod tests {
             vault.join("Projects").join("Sub")
         );
         assert_eq!(resolve_folder(&vault, "Projects/..").unwrap(), vault);
-        assert!(resolve_folder(&vault, "..")
-            .unwrap_err()
-            .contains("outside vault"));
-        assert!(resolve_folder(&vault, "missing")
-            .unwrap_err()
-            .contains("not found"));
+        assert_eq!(
+            resolve_folder(&vault, "..").unwrap_err(),
+            t("err.outside_vault", &[("input", "..")])
+        );
+        assert_eq!(
+            resolve_folder(&vault, "missing").unwrap_err(),
+            t("err.folder_not_found", &[("input", "missing")])
+        );
         let _ = fs::remove_dir_all(&vault);
     }
 

@@ -2,13 +2,14 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use crate::config;
+use crate::i18n::t;
 
 /// Load the vault list from the config file.
 /// A vault given on the command line is added to the list (saved to the config file if new)
 /// and becomes the current vault. Without an argument, the first existing vault is current.
 /// Returns the list and the index of the current vault.
 pub fn startup(arg: Option<&String>) -> Result<(Vec<PathBuf>, usize), String> {
-    let path = config::config_path().ok_or("cannot locate config directory")?;
+    let path = config::config_path().ok_or_else(|| t("err.no_config_dir", &[]))?;
     let mut cfg = config::load(&path)?;
     let current = match arg {
         Some(input) => {
@@ -22,12 +23,11 @@ pub fn startup(arg: Option<&String>) -> Result<(Vec<PathBuf>, usize), String> {
                 }
             }
         }
-        None => cfg.vaults.iter().position(|v| v.is_dir()).ok_or_else(|| {
-            format!(
-                "no vault available; pass a folder or set `vaults = [...]` in {}",
-                path.display()
-            )
-        })?,
+        None => cfg
+            .vaults
+            .iter()
+            .position(|v| v.is_dir())
+            .ok_or_else(|| t("err.no_vault", &[("path", &path.display().to_string())]))?,
     };
     Ok((cfg.vaults, current))
 }
@@ -43,7 +43,7 @@ fn absolute(input: &str) -> Result<PathBuf, String> {
     if full.is_dir() {
         Ok(full)
     } else {
-        Err(format!("not a directory: {input}"))
+        Err(t("err.not_folder", &[("input", input)]))
     }
 }
 

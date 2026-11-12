@@ -5,11 +5,16 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::t;
+
 /// Config file contents. `vaults` is the list shown in the vault panel, in order.
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
 pub struct Config {
     #[serde(default)]
     pub vaults: Vec<PathBuf>,
+    /// Screen language ("en", "ko", ...). Empty means auto-detect. See i18n.rs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 /// Location of the config file: %APPDATA% on Windows, $XDG_CONFIG_HOME or ~/.config elsewhere.
@@ -38,7 +43,8 @@ pub fn save(path: &Path, cfg: &Config) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    let text = toml::to_string(cfg).map_err(|e| format!("config encode: {e}"))?;
+    let text =
+        toml::to_string(cfg).map_err(|e| t("err.config_encode", &[("error", &e.to_string())]))?;
     fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
@@ -59,6 +65,15 @@ mod tests {
     fn empty_config_has_no_vaults() {
         let cfg: Config = toml::from_str("").unwrap();
         assert!(cfg.vaults.is_empty());
+        assert_eq!(cfg.lang, None);
+    }
+
+    #[test]
+    fn lang_is_read_and_kept_when_unset_it_is_not_written() {
+        let cfg: Config = toml::from_str("lang = 'ko'").unwrap();
+        assert_eq!(cfg.lang.as_deref(), Some("ko"));
+        let unset = Config::default();
+        assert!(!toml::to_string(&unset).unwrap().contains("lang"));
     }
 
     #[test]
@@ -67,6 +82,7 @@ mod tests {
         let path = dir.join("config.toml");
         let cfg = Config {
             vaults: vec![PathBuf::from(r"C:\work\obsidian\herdr_test")],
+            lang: Some("ko".to_string()),
         };
         save(&path, &cfg).unwrap();
         assert_eq!(load(&path).unwrap(), cfg);

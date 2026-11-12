@@ -3,19 +3,21 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::i18n::t;
+
 /// Check a file or folder name typed by the user (trimmed). Rejects names that would
 /// escape the folder or that Windows forbids.
 pub fn check_name(input: &str) -> Result<String, String> {
     let name = input.trim();
     if name.is_empty() {
-        return Err("이름이 비어 있습니다".into());
+        return Err(t("err.name_empty", &[]));
     }
     if name.starts_with('.')
         || name
             .chars()
             .any(|c| c.is_control() || "/\\:*?\"<>|".contains(c))
     {
-        return Err(format!("사용할 수 없는 이름: {name}"));
+        return Err(t("err.name_invalid", &[("name", name)]));
     }
     Ok(name.to_string())
 }
@@ -35,8 +37,8 @@ pub fn create_folder(parent: &Path, name: &str) -> Result<PathBuf, String> {
     let path = parent.join(name);
     match fs::create_dir(&path) {
         Ok(()) => Ok(path),
-        Err(e) if e.kind() == ErrorKind::AlreadyExists => Err(format!("이미 있음: {name}")),
-        Err(e) => Err(format!("폴더 생성 실패: {e}")),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => Err(t("err.exists", &[("name", name)])),
+        Err(e) => Err(t("err.folder_create", &[("error", &e.to_string())])),
     }
 }
 
@@ -45,8 +47,8 @@ pub fn create_note(dir: &Path, name: &str) -> Result<PathBuf, String> {
     let path = dir.join(name);
     match OpenOptions::new().write(true).create_new(true).open(&path) {
         Ok(_) => Ok(path),
-        Err(e) if e.kind() == ErrorKind::AlreadyExists => Err(format!("이미 있음: {name}")),
-        Err(e) => Err(format!("생성 실패: {e}")),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => Err(t("err.exists", &[("name", name)])),
+        Err(e) => Err(t("err.note_create", &[("error", &e.to_string())])),
     }
 }
 
@@ -58,9 +60,9 @@ pub fn rename_note(from: &Path, new_name: &str) -> Result<PathBuf, String> {
         .file_name()
         .is_some_and(|old| old.to_string_lossy().eq_ignore_ascii_case(new_name));
     if to.exists() && !case_only {
-        return Err(format!("이미 있음: {new_name}"));
+        return Err(t("err.exists", &[("name", new_name)]));
     }
-    fs::rename(from, &to).map_err(|e| format!("이름 변경 실패: {e}"))?;
+    fs::rename(from, &to).map_err(|e| t("err.rename", &[("error", &e.to_string())]))?;
     Ok(to)
 }
 
@@ -71,9 +73,9 @@ pub fn trash_note(root: &Path, path: &Path, now: SystemTime) -> Result<PathBuf, 
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .ok_or_else(|| "이름이 없습니다".to_string())?;
+        .ok_or_else(|| t("err.no_name", &[]))?;
     let dir = root.join(".trash");
-    fs::create_dir_all(&dir).map_err(|e| format!("휴지통 폴더 생성 실패: {e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| t("err.trash_dir", &[("error", &e.to_string())]))?;
     let mut target = dir.join(&name);
     if target.exists() {
         let (stem, ext) = match name.rsplit_once('.') {
@@ -88,7 +90,7 @@ pub fn trash_note(root: &Path, path: &Path, now: SystemTime) -> Result<PathBuf, 
             n += 1;
         }
     }
-    fs::rename(path, &target).map_err(|e| format!("휴지통 이동 실패: {e}"))?;
+    fs::rename(path, &target).map_err(|e| t("err.trash_move", &[("error", &e.to_string())]))?;
     Ok(target)
 }
 
@@ -146,7 +148,10 @@ mod tests {
         let dir = temp_dir("create");
         let path = create_note(&dir, "a.md").unwrap();
         fs::write(&path, "keep me").unwrap();
-        assert!(create_note(&dir, "a.md").unwrap_err().contains("이미 있음"));
+        assert_eq!(
+            create_note(&dir, "a.md").unwrap_err(),
+            t("err.exists", &[("name", "a.md")])
+        );
         assert_eq!(fs::read_to_string(&path).unwrap(), "keep me");
         let _ = fs::remove_dir_all(&dir);
     }
@@ -156,7 +161,10 @@ mod tests {
         let dir = temp_dir("rename");
         let a = create_note(&dir, "a.md").unwrap();
         create_note(&dir, "b.md").unwrap();
-        assert!(rename_note(&a, "b.md").unwrap_err().contains("이미 있음"));
+        assert_eq!(
+            rename_note(&a, "b.md").unwrap_err(),
+            t("err.exists", &[("name", "b.md")])
+        );
         assert!(a.exists());
         let moved = rename_note(&a, "c.md").unwrap();
         assert_eq!(moved, dir.join("c.md"));
@@ -171,7 +179,7 @@ mod tests {
         assert!(made.is_dir());
         assert!(create_folder(&dir, "Inbox")
             .unwrap_err()
-            .contains("이미 있음"));
+            .eq(&t("err.exists", &[("name", "Inbox")])));
         let _ = fs::remove_dir_all(&dir);
     }
 
