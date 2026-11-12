@@ -1,0 +1,18 @@
+[package]
+name = "herdr-obsidian"
+version = "0.1.0"
+edition = "2021"
+description = "Browse, read, write and search an Obsidian vault in a herdr pane"
+license = "MIT"
+
+[dependencies]
+crossterm = "0.29.0"
+ratatui = "0.30.2"
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.2.1"
+unicode-width = "0.2.3"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
