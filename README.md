@@ -32,7 +32,7 @@ Build first, then install the plugin from the folder (`herdr-plugin.toml` is in 
 git clone https://github.com/vrwolf1004/herdr-obsidian.git
 cd herdr-obsidian
 cargo build --release
-herdr plugin install .
+herdr plugin link .
 ```
 
 Or run the binary directly in a herdr pane:

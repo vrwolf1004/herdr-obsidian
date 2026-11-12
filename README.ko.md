@@ -26,7 +26,7 @@ saved: C:\work\obsidian\herdr_test\Projects\plan.md             Ctrl+H 단축키
 
 ## 설치
 
-빌드한 뒤 `herdr plugin install .`으로 플러그인을 설치합니다(`herdr-plugin.toml`은 저장소 루트에 있습니다). 또는 herdr pane에서 바이너리를 직접 실행합니다.
+빌드한 뒤 `herdr plugin link .`으로 플러그인을 연결합니다(`herdr-plugin.toml`은 저장소 루트에 있습니다). 또는 herdr pane에서 바이너리를 직접 실행합니다.
 
 ```sh
 git clone https://github.com/vrwolf1004/herdr-obsidian.git
