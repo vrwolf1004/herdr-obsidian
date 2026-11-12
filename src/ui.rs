@@ -100,6 +100,7 @@ const HELP_ROWS: &[HelpRow] = &[
     HelpRow::Key("Ctrl+T", "help.desc.rename"),
     HelpRow::Key("Ctrl+D", "help.desc.trash"),
     HelpRow::Key("Ctrl+S", "help.desc.save"),
+    HelpRow::Key("Ctrl+P", "help.desc.preview"),
     HelpRow::Key("Ctrl+Q", "help.desc.quit"),
     HelpRow::Key("Ctrl+H", "help.desc.help"),
     HelpRow::Key("Esc", "help.desc.focus"),
@@ -107,6 +108,8 @@ const HELP_ROWS: &[HelpRow] = &[
     HelpRow::Section("help.section.vaults"),
     HelpRow::Key("↑ ↓", "help.desc.vault_move"),
     HelpRow::Key("Enter", "help.desc.vault_switch"),
+    HelpRow::Key("Delete", "help.desc.vault_remove"),
+    HelpRow::Key("Ctrl+E", "help.desc.add_vault"),
     HelpRow::Blank,
     HelpRow::Section("help.section.tree"),
     HelpRow::Key("↑ ↓", "help.desc.tree_move"),
@@ -170,6 +173,7 @@ fn prompt_label(kind: &PromptKind) -> String {
         PromptKind::NewNote => t("prompt.new_note", &[]),
         PromptKind::Rename(_) => t("prompt.rename", &[]),
         PromptKind::NewFolder(_) => t("prompt.new_folder", &[]),
+        PromptKind::AddVault => t("prompt.add_vault", &[]),
     }
 }
 
@@ -290,7 +294,12 @@ fn draw_editor(f: &mut Frame, app: &mut App, area: Rect) {
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            format!(" {name}{} ", if ed.dirty { " ●" } else { "" })
+            let preview = if app.preview {
+                t("ui.title.preview", &[])
+            } else {
+                String::new()
+            };
+            format!(" {name}{}{preview} ", if ed.dirty { " ●" } else { "" })
         }
         None => t("ui.title.no_note", &[]),
     };
@@ -301,6 +310,7 @@ fn draw_editor(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(block, area);
     app.editor_area = inner;
 
+    let preview = app.preview;
     let Some(ed) = app.editor.as_mut() else {
         return;
     };
@@ -329,13 +339,20 @@ fn draw_editor(f: &mut Frame, app: &mut App, area: Rect) {
     }
 
     let mut in_fence = false;
-    let lines: Vec<Line> = ed.lines.iter().map(|l| md_line(l, &mut in_fence)).collect();
+    let lines: Vec<Line> = if preview {
+        ed.lines
+            .iter()
+            .map(|l| md_preview_line(l, &mut in_fence))
+            .collect()
+    } else {
+        ed.lines.iter().map(|l| md_line(l, &mut in_fence)).collect()
+    };
     f.render_widget(
         Paragraph::new(Text::from(lines)).scroll((ed.scroll_y as u16, ed.scroll_x as u16)),
         inner,
     );
 
-    if focused && height > 0 && !app.help_open {
+    if focused && !preview && height > 0 && !app.help_open {
         let x = inner.x + (cursor_x - ed.scroll_x) as u16;
         let y = inner.y + (ed.row - ed.scroll_y) as u16;
         f.set_cursor_position((x, y));
@@ -370,9 +387,153 @@ fn md_line(text: &str, in_fence: &mut bool) -> Line<'static> {
     Line::from(Span::styled(text.to_string(), style))
 }
 
+/// Preview of one source line: markers hidden, styles applied. Keeps one output line per source line.
+fn md_preview_line(text: &str, in_fence: &mut bool) -> Line<'static> {
+    let trimmed = text.trim_start();
+    if trimmed.starts_with("```") {
+        *in_fence = !*in_fence;
+        return Line::default();
+    }
+    if *in_fence {
+        return Line::from(Span::styled(
+            text.to_string(),
+            Style::new().fg(Color::Green),
+        ));
+    }
+    let indent = &text[..text.len() - trimmed.len()];
+    let hashes = trimmed.len() - trimmed.trim_start_matches('#').len();
+    if (1..=6).contains(&hashes) && trimmed[hashes..].starts_with(' ') {
+        let style = Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+        return Line::from(md_inline(&trimmed[hashes + 1..], style));
+    }
+    if let Some(body) = trimmed.strip_prefix('>') {
+        let style = Style::new()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::ITALIC);
+        return Line::from(md_inline(body.trim_start(), style));
+    }
+    if let Some(rest) = trimmed.strip_prefix("- ").or(trimmed.strip_prefix("* ")) {
+        let mut spans = vec![Span::raw(format!("{indent}• "))];
+        spans.extend(md_inline(rest, Style::new()));
+        return Line::from(spans);
+    }
+    Line::from(md_inline(text, Style::new()))
+}
+
+/// Split inline markdown into styled spans: `code`, **bold**, *italic*, [text](url) (url hidden).
+fn md_inline(text: &str, base: Style) -> Vec<Span<'static>> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut spans = Vec::new();
+    let mut plain = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let styled = match c {
+            '`' => find(&chars, i + 1, &['`']).map(|j| {
+                let span = Span::styled(collect(&chars[i + 1..j]), base.fg(Color::Magenta));
+                (span, j + 1)
+            }),
+            '*' | '_' if chars.get(i + 1) == Some(&c) => find(&chars, i + 2, &[c, c]).map(|j| {
+                let span =
+                    Span::styled(collect(&chars[i + 2..j]), base.add_modifier(Modifier::BOLD));
+                (span, j + 2)
+            }),
+            '*' | '_' if chars.get(i + 1).is_some_and(|n| !n.is_whitespace()) => {
+                find(&chars, i + 1, &[c])
+                    .filter(|&j| !chars[j - 1].is_whitespace())
+                    .map(|j| {
+                        let span = Span::styled(
+                            collect(&chars[i + 1..j]),
+                            base.add_modifier(Modifier::ITALIC),
+                        );
+                        (span, j + 1)
+                    })
+            }
+            '[' => find(&chars, i + 1, &[']']).and_then(|j| {
+                if chars.get(j + 1) != Some(&'(') {
+                    return None;
+                }
+                let k = find(&chars, j + 2, &[')'])?;
+                let style = base.fg(Color::Cyan).add_modifier(Modifier::UNDERLINED);
+                Some((Span::styled(collect(&chars[i + 1..j]), style), k + 1))
+            }),
+            _ => None,
+        };
+        match styled {
+            Some((span, next)) => {
+                if !plain.is_empty() {
+                    spans.push(Span::styled(std::mem::take(&mut plain), base));
+                }
+                spans.push(span);
+                i = next;
+            }
+            None => {
+                plain.push(c);
+                i += 1;
+            }
+        }
+    }
+    if !plain.is_empty() {
+        spans.push(Span::styled(plain, base));
+    }
+    spans
+}
+
+/// Index of the first `pat` at or after `from`.
+fn find(chars: &[char], from: usize, pat: &[char]) -> Option<usize> {
+    (from..chars.len()).find(|&j| chars[j..].starts_with(pat))
+}
+
+fn collect(chars: &[char]) -> String {
+    chars.iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::tail_within;
+    use super::{md_inline, md_preview_line, tail_within};
+    use ratatui::style::Modifier;
+
+    fn text_of(spans: &[ratatui::text::Span]) -> String {
+        spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn inline_hides_markers_and_styles_spans() {
+        let spans = md_inline("a **b** `c` *d* [e](f) g", Default::default());
+        assert_eq!(text_of(&spans), "a b c d e g");
+        assert!(spans[1].style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn inline_leaves_unclosed_markers_as_text() {
+        let spans = md_inline("2 * 3 and `x", Default::default());
+        assert_eq!(text_of(&spans), "2 * 3 and `x");
+    }
+
+    #[test]
+    fn preview_hides_heading_and_fence_markers() {
+        let mut in_fence = false;
+        assert_eq!(
+            text_of(&md_preview_line("## Title", &mut in_fence).spans),
+            "Title"
+        );
+        assert!(md_preview_line("```", &mut in_fence).spans.is_empty());
+        assert_eq!(
+            text_of(&md_preview_line("let x", &mut in_fence).spans),
+            "let x"
+        );
+        assert!(md_preview_line("```", &mut in_fence).spans.is_empty());
+        assert!(!in_fence);
+    }
+
+    #[test]
+    fn preview_bullets_use_dot() {
+        let mut in_fence = false;
+        assert_eq!(
+            text_of(&md_preview_line("  - item", &mut in_fence).spans),
+            "  • item"
+        );
+    }
 
     #[test]
     fn tail_keeps_end_and_counts_wide_chars() {

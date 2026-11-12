@@ -18,7 +18,7 @@ vaults = ['C:\work\obsidian\herdr_test', 'C:\work\obsidian\test']
 - A vault given on the command line is added to the list (if new) and opened.
 - Without an argument, the first existing vault in the list is opened.
 - A vault folder that no longer exists is shown as `(없음)`.
-- The list is only changed by adding a command-line vault. Remove an entry by editing the file.
+- The list changes when a command-line vault is added, or when you press `Delete` on a vault (after `y` to confirm). Removing an entry does not delete the folder.
 
 ## Shortcuts
 
@@ -37,6 +37,7 @@ Press `Ctrl+H` in the app to see this list in a popup.
 | `Esc` | Switch focus (vaults → list → editor); close a prompt or popup |
 | `↑` `↓` | Move in the vault list or the folder/note list |
 | `Enter` / `→` | Open a note, expand a folder, or switch to the selected vault |
+| `Delete` | In the vault list: remove the selected vault from the list (the folder is kept; `y` to confirm) |
 | `←` | Collapse an open folder; otherwise move to the parent folder |
 | `r` | Refresh the list |
 | Mouse | Click to select or place the cursor; wheel to scroll |

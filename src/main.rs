@@ -50,6 +50,8 @@ pub enum PromptKind {
     Rename(PathBuf),
     /// Ctrl+G: name of a new folder inside this parent folder.
     NewFolder(PathBuf),
+    /// Ctrl+E: absolute path of a folder to add to the vault list.
+    AddVault,
 }
 
 pub struct Prompt {
@@ -76,9 +78,13 @@ pub struct App {
     pub prompt: Option<Prompt>,
     /// File waiting for delete confirmation (Ctrl+D). `Some` while waiting.
     pub confirm_delete: Option<PathBuf>,
+    /// Vault index waiting for removal confirmation (Delete in the vault list). `Some` while waiting.
+    pub confirm_vault: Option<usize>,
     /// Content areas (inside borders) from the last draw, used for mouse hit-testing.
     pub tree_area: Rect,
     pub editor_area: Rect,
+    /// Ctrl+P: show the open note as rendered markdown (read-only).
+    pub preview: bool,
     pub quit: bool,
     /// When a failed save may be retried. `None` when the last save succeeded.
     pub retry_at: Option<Instant>,
@@ -106,8 +112,10 @@ impl App {
             status: t("status.default", &[]),
             prompt: None,
             confirm_delete: None,
+            confirm_vault: None,
             tree_area: Rect::default(),
             editor_area: Rect::default(),
+            preview: false,
             quit: false,
             retry_at: None,
             quit_armed: false,
@@ -158,7 +166,45 @@ impl App {
             PromptKind::NewNote => self.new_note(&input),
             PromptKind::Rename(from) => self.rename_selected(&from, &input),
             PromptKind::NewFolder(parent) => self.new_folder(&parent, &input),
+            PromptKind::AddVault => self.add_vault(&input),
         }
+    }
+
+    /// Add a folder to the vault list (or switch to it if already listed), then save config.toml.
+    fn add_vault(&mut self, input: &str) {
+        // Explorer's "Copy as path" wraps the path in quotes.
+        let input = input.trim_matches('"');
+        if input.is_empty() {
+            self.status = t("err.not_folder", &[("input", input)]);
+            return;
+        }
+        let dir = match vaults::absolute(input) {
+            Ok(dir) => dir,
+            Err(msg) => {
+                self.status = msg;
+                return;
+            }
+        };
+        if let Some(index) = vaults::position(&self.vaults, &dir) {
+            self.switch_vault(index);
+            return;
+        }
+        let mut list = self.vaults.clone();
+        list.push(dir);
+        if let Err(e) = self.save_vaults(&list) {
+            self.status = e;
+            return;
+        }
+        self.vaults = list;
+        self.switch_vault(self.vaults.len() - 1);
+    }
+
+    /// Write `list` as the vault list in config.toml. Other settings are kept.
+    fn save_vaults(&self, list: &[PathBuf]) -> Result<(), String> {
+        let config_file = config::config_path().ok_or_else(|| t("err.no_config_dir", &[]))?;
+        let mut cfg = config::load(&config_file)?;
+        cfg.vaults = list.to_vec();
+        config::save(&config_file, &cfg)
     }
 
     fn start_new_folder(&mut self) {
@@ -443,8 +489,71 @@ impl App {
                 }
             }
             KeyCode::Enter => self.switch_vault(self.vault_selected),
+            KeyCode::Delete => self.start_remove_vault(),
             _ => {}
         }
+    }
+
+    /// Ask before taking the selected vault off the list. The folder itself is never touched.
+    fn start_remove_vault(&mut self) {
+        let index = self.vault_selected;
+        let Some(path) = self.vaults.get(index) else {
+            return;
+        };
+        if self.vaults.len() <= 1 {
+            self.status = t("msg.vault_last", &[]);
+            return;
+        }
+        self.status = t(
+            "msg.confirm_vault_remove",
+            &[("name", &path.display().to_string())],
+        );
+        self.confirm_vault = Some(index);
+    }
+
+    fn confirm_vault_key(&mut self, key: KeyEvent) {
+        let Some(index) = self.confirm_vault.take() else {
+            return;
+        };
+        if key.code != KeyCode::Char('y') && key.code != KeyCode::Char('Y') {
+            self.status = t("msg.vault_remove_cancelled", &[]);
+            return;
+        }
+        self.remove_vault(index);
+    }
+
+    /// Drop `vaults[index]` from the list and from config.toml. Switches vault if it was the current one.
+    fn remove_vault(&mut self, index: usize) {
+        if index == self.current_vault && !self.save_now() {
+            return;
+        }
+        let removed = self.vaults[index].clone();
+        let mut list = self.vaults.clone();
+        list.remove(index);
+        if let Err(e) = self.save_vaults(&list) {
+            self.status = e;
+            return;
+        }
+
+        if index == self.current_vault {
+            let next = index.min(list.len() - 1);
+            self.editor = None;
+            self.current_vault = next;
+            self.vault = list[next].clone();
+            self.tree.set_root(self.vault.clone());
+            self.selected = 0;
+            self.tree_offset = 0;
+            self.focus = Focus::Tree;
+        } else if index < self.current_vault {
+            self.current_vault -= 1;
+        }
+        self.vaults = list;
+        self.vault_selected = index.min(self.vaults.len() - 1);
+        self.vault_offset = 0;
+        self.status = t(
+            "msg.vault_removed",
+            &[("path", &removed.display().to_string())],
+        );
     }
 
     fn tree_key(&mut self, key: KeyEvent) {
@@ -473,11 +582,28 @@ impl App {
     }
 
     fn editor_key(&mut self, key: KeyEvent) {
+        // Preview is read-only: only cursor movement goes through.
+        let moves_only = self.preview;
         let Some(ed) = self.editor.as_mut() else {
             return;
         };
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
+        if moves_only
+            && !matches!(
+                key.code,
+                KeyCode::Left
+                    | KeyCode::Right
+                    | KeyCode::Up
+                    | KeyCode::Down
+                    | KeyCode::Home
+                    | KeyCode::End
+                    | KeyCode::PageUp
+                    | KeyCode::PageDown
+            )
+        {
+            return;
+        }
         match key.code {
             // Ctrl+letter is a shortcut; AltGr (Ctrl+Alt) still types.
             KeyCode::Char(c) if !ctrl || alt => ed.insert_char(c),
@@ -638,6 +764,10 @@ fn handle_key(app: &mut App, key: KeyEvent) {
     if !is_quit {
         app.quit_armed = false;
     }
+    if app.confirm_vault.is_some() {
+        app.confirm_vault_key(key);
+        return;
+    }
     if app.confirm_delete.is_some() {
         app.confirm_key(key);
         return;
@@ -699,6 +829,19 @@ fn handle_key(app: &mut App, key: KeyEvent) {
             }
             KeyCode::Char('g') => {
                 app.start_new_folder();
+                return;
+            }
+            KeyCode::Char('p') => {
+                if app.editor.is_some() {
+                    app.preview = !app.preview;
+                }
+                return;
+            }
+            KeyCode::Char('e') => {
+                app.prompt = Some(Prompt {
+                    kind: PromptKind::AddVault,
+                    input: String::new(),
+                });
                 return;
             }
             _ => {}

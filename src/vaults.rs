@@ -33,7 +33,7 @@ pub fn startup(arg: Option<&String>) -> Result<(Vec<PathBuf>, usize), String> {
 }
 
 /// Make a user-typed folder path absolute (relative to the current directory) and check it exists.
-fn absolute(input: &str) -> Result<PathBuf, String> {
+pub fn absolute(input: &str) -> Result<PathBuf, String> {
     let path = Path::new(input);
     let full = if path.is_absolute() {
         path.to_path_buf()
@@ -48,7 +48,7 @@ fn absolute(input: &str) -> Result<PathBuf, String> {
 }
 
 /// Index of `dir` in `list`, comparing canonical paths so different spellings match.
-fn position(list: &[PathBuf], dir: &Path) -> Option<usize> {
+pub fn position(list: &[PathBuf], dir: &Path) -> Option<usize> {
     let real = dir.canonicalize().ok();
     list.iter()
         .position(|v| v == dir || (real.is_some() && v.canonicalize().ok() == real))
