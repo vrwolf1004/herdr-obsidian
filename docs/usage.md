@@ -84,4 +84,4 @@ cargo build --release
 target/release/herdr-obsidian "C:\work\obsidian\herdr_test"
 ```
 
-Run the binary in a herdr pane. There is no `herdr-plugin.toml` yet, so `herdr plugin install` does not work.
+Run the binary in a herdr pane, or install the plugin with `herdr plugin install .` after the build (`herdr-plugin.toml` in the repo root).

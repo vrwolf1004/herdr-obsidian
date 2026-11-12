@@ -1,0 +1,42 @@
+id = "herdr-obsidian"
+name = "herdr-obsidian"
+version = "0.5.0"
+min_herdr_version = "0.9.0"
+platforms = ["windows", "linux", "macos"]
+description = "Browse, read, write and search an Obsidian vault in a herdr pane"
+
+# 바이너리는 `cargo build --release` 로 먼저 빌드해야 한다. 명령 경로는 플러그인 폴더 기준 상대 경로.
+# 볼트 인자를 주지 않으면 config.toml 의 vaults 목록을 쓴다.
+# herdr 는 액션 id 중복을 허용하지 않으므로 Windows 쪽 id 에 -windows 를 붙인다.
+
+# ---------------------------------------------------------------- Linux / macOS
+
+[[actions]]
+id = "open"
+title = "obsidian: open vault"
+platforms = ["linux", "macos"]
+contexts = ["pane", "workspace"]
+command = ["target/release/herdr-obsidian"]
+
+[[panes]]
+id = "main"
+title = "obsidian"
+platforms = ["linux", "macos"]
+placement = "split"
+command = ["target/release/herdr-obsidian"]
+
+# ---------------------------------------------------------------- Windows
+
+[[actions]]
+id = "open-windows"
+title = "obsidian: open vault"
+platforms = ["windows"]
+contexts = ["pane", "workspace"]
+command = ["target/release/herdr-obsidian.exe"]
+
+[[panes]]
+id = "main-windows"
+title = "obsidian"
+platforms = ["windows"]
+placement = "split"
+command = ["target/release/herdr-obsidian.exe"]

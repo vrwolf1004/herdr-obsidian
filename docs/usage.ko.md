@@ -84,4 +84,4 @@ cargo build --release
 target/release/herdr-obsidian "C:\work\obsidian\herdr_test"
 ```
 
-실행 파일은 herdr pane에서 실행합니다. 아직 `herdr-plugin.toml`이 없어서 `herdr plugin install`은 되지 않습니다.
+실행 파일은 herdr pane에서 실행합니다. 빌드한 뒤 `herdr plugin install .`으로 설치할 수 있습니다(`herdr-plugin.toml`은 저장소 루트에 있습니다).

@@ -5,7 +5,7 @@
 ## 기본 골격
 
 - [x] Rust 프로젝트 골격 (`Cargo.toml`, `src/main.rs`, `.gitignore`)
-- [ ] `herdr-plugin.toml` 작성 (herdr 연동 action·pane·tab)
+- [x] `herdr-plugin.toml` 작성 (herdr 연동 action·pane·tab)
 - [ ] 버전 관리 규칙 정하기 (herdr-radio 방식 참고)
 
 ## 볼트 설정
