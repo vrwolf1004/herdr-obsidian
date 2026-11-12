@@ -26,12 +26,18 @@ Editor on the left, vault list and folder/note list on the right, status line at
 
 ## Installation
 
-There is no `herdr-plugin.toml` yet, so `herdr plugin install` does not work. Build it and run it in a herdr pane:
+Build first, then install the plugin from the folder (`herdr-plugin.toml` is in the repo root):
 
 ```sh
 git clone https://github.com/vrwolf1004/herdr-obsidian.git
 cd herdr-obsidian
 cargo build --release
+herdr plugin install .
+```
+
+Or run the binary directly in a herdr pane:
+
+```sh
 target/release/herdr-obsidian "C:\work\obsidian\herdr_test"
 ```
 
