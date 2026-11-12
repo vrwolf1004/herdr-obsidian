@@ -2,7 +2,7 @@
 
 [**English**](README.md) | [한국어](README.ko.md)
 
-UI language: Korean
+UI languages: English · Korean · Russian · French · Spanish · German · Japanese
 
 Browse and edit an [Obsidian](https://obsidian.md) vault from one herdr pane. Notes are plain Markdown files, so any folder works, including one synced by Google Drive for desktop.
 

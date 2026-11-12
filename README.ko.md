@@ -2,7 +2,7 @@
 
 [English](README.md) | [**한국어**](README.ko.md)
 
-지원 언어: 한국어
+지원 언어: 영어 · 한국어 · 러시아어 · 프랑스어 · 스페인어 · 독일어 · 일본어
 
 herdr pane 하나에서 [Obsidian](https://obsidian.md) 볼트를 보고 편집합니다. 노트는 일반 Markdown 파일이라 어떤 폴더든 쓸 수 있고, Google Drive 데스크톱 앱으로 동기화된 폴더도 됩니다.
 
