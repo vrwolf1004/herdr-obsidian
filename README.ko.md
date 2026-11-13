@@ -35,11 +35,19 @@ cargo build --release
 target/release/herdr-obsidian "C:\work\obsidian\herdr_test"
 ```
 
-## 빠른 시작
+## 액션
 
-- `Ctrl+O`: 볼트 안의 폴더를 엽니다.
-- `Ctrl+N` / `Ctrl+G`: 노트 / 폴더를 만듭니다.
-- `Ctrl+H`: 모든 단축키를 봅니다.
+| 액션 | 기능 |
+| --- | --- |
+| `open` | 볼트 앱을 pane에 엽니다. 볼트 인자가 없으면 `config.toml`의 `vaults` 목록을 씁니다 |
+
+Windows에서는 액션 ID 뒤에 `-windows`를 붙입니다. 앱에서 `Ctrl+O`는 볼트의 폴더 열기, `Ctrl+N` / `Ctrl+G`는 노트 / 폴더 만들기, `Ctrl+H`는 전체 단축키 보기입니다. [사용법](docs/usage.ko.md)을 참고하세요.
+
+## 요구 사항
+
+- Windows, Linux, macOS (개발과 테스트는 Windows에서 했습니다)
+- herdr 0.9.0 이상
+- 빌드용 Rust (stable)
 
 ## 문서
 
@@ -47,10 +55,7 @@ target/release/herdr-obsidian "C:\work\obsidian\herdr_test"
 - [Usage (English)](docs/usage.md)
 - [릴리스 노트](docs/release-notes.ko.md)
 - [TODO](docs/todo.md)
-
-## 라이선스
-
-MIT
+- [추가 항목](docs/readme-extras.ko.md): README에서 옮긴 항목
 
 ## 프로젝트 응원하기
 

@@ -41,11 +41,19 @@ Or run the binary directly in a herdr pane:
 target/release/herdr-obsidian "C:\work\obsidian\herdr_test"
 ```
 
-## Quick start
+## Actions
 
-- `Ctrl+O`: open a folder in the vault.
-- `Ctrl+N` / `Ctrl+G`: create a note / folder.
-- `Ctrl+H`: show all shortcuts.
+| Action | What it does |
+| --- | --- |
+| `open` | Open the vault app in a pane. Without a vault argument it uses the `vaults` list in `config.toml` |
+
+On Windows, append `-windows` to the action ID. In the app, `Ctrl+O` opens a folder in the vault, `Ctrl+N` / `Ctrl+G` create a note / folder, and `Ctrl+H` shows all shortcuts. See the [usage guide](docs/usage.md).
+
+## Requirements
+
+- Windows, Linux, or macOS (developed and tested on Windows)
+- herdr 0.9.0 or later
+- Rust (stable), to build
 
 ## Documentation
 
@@ -53,10 +61,7 @@ target/release/herdr-obsidian "C:\work\obsidian\herdr_test"
 - [사용법 (한국어)](docs/usage.ko.md)
 - [Release notes](docs/release-notes.md)
 - [TODO](docs/todo.md)
-
-## License
-
-MIT
+- [Additional sections](docs/readme-extras.md): sections moved out of this README
 
 ## Support the project
 
